@@ -1,6 +1,5 @@
-name=Operacion Ultima Senal
-id=operation-ultima-senal
+name=Operation Last Signal (Development)
+id=operation-last-signal-dev
 description=Mission bootstrap for a private Build 42.20 cooperative operation.
 author=Private
 version=0.1.0
-

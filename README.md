@@ -1,4 +1,4 @@
-# Operation Last Signal — bootstrap 0.2.0
+# Operation Last Signal — development
 
 Target: Project Zomboid Build 42.20.2, hosted multiplayer.
 

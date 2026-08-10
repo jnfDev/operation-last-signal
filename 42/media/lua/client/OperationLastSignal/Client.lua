@@ -1,9 +1,9 @@
-local Mission = require("OperationUltimaSenal/Config")
+local Mission = require("OperationLastSignal/Config")
 require "ISUI/ISPanel"
 require "ISUI/ISButton"
 
-local RoleSelectPanel = ISPanel:derive("OperationUltimaSenalRoleSelect")
-local DeploymentPanel = ISPanel:derive("OperationUltimaSenalDeployment")
+local RoleSelectPanel = ISPanel:derive("OperationLastSignalRoleSelect")
+local DeploymentPanel = ISPanel:derive("OperationLastSignalDeployment")
 local rolePanel
 local deploymentPanel
 local bootstrapComplete = false
@@ -25,8 +25,8 @@ end
 
 function RoleSelectPanel:render()
     ISPanel.render(self)
-    self:drawTextCentre("OPERACION ULTIMA SENAL", self.width / 2, 16, 0.90, 0.72, 0.34, 1, UIFont.Large)
-    self:drawTextCentre("Elige un personaje para esta operacion", self.width / 2, 49, 0.85, 0.85, 0.85, 1, UIFont.Small)
+    self:drawTextCentre("OPERATION LAST SIGNAL", self.width / 2, 16, 0.90, 0.72, 0.34, 1, UIFont.Large)
+    self:drawTextCentre("Choose a character for this operation", self.width / 2, 49, 0.85, 0.85, 0.85, 1, UIFont.Small)
 
     for index, role in ipairs(self.roles or {}) do
         local y = 82 + (index - 1) * 76
@@ -37,7 +37,7 @@ function RoleSelectPanel:render()
 end
 
 function RoleSelectPanel:onChooseRole(button)
-    self.statusMessage = "Asignando rol y equipo..."
+    self.statusMessage = "Assigning role and equipment..."
     for _, roleButton in ipairs(self.roleButtons) do
         roleButton:setEnable(false)
     end
@@ -52,10 +52,10 @@ function RoleSelectPanel:updateRoles(status)
 
         if claimedByOther then
             button:setEnable(false)
-            button:setTitle("OCUPADO")
+            button:setTitle("CLAIMED")
         else
             button:setEnable(true)
-            button:setTitle("ELEGIR")
+            button:setTitle("SELECT")
         end
     end
 
@@ -83,7 +83,7 @@ function RoleSelectPanel:new(status)
     panel.roles = {}
 
     for index, role in ipairs(status.roles) do
-        local button = ISButton:new(548, 82 + (index - 1) * 76, 125, 32, "ELEGIR", panel, RoleSelectPanel.onChooseRole)
+        local button = ISButton:new(548, 82 + (index - 1) * 76, 125, 32, "SELECT", panel, RoleSelectPanel.onChooseRole)
         button:initialise()
         button.roleId = role.id
         panel:addChild(button)
@@ -105,9 +105,9 @@ end
 
 function DeploymentPanel:render()
     ISPanel.render(self)
-    self:drawTextCentre("OPERACION ULTIMA SENAL", self.width / 2, 22, 0.90, 0.72, 0.34, 1, UIFont.Medium)
-    self:drawTextCentre("Preparando despliegue...", self.width / 2, 57, 0.90, 0.90, 0.90, 1, UIFont.Small)
-    self:drawTextCentre("Sincronizando equipo y uniforme", self.width / 2, 80, 0.70, 0.70, 0.70, 1, UIFont.Small)
+    self:drawTextCentre("OPERATION LAST SIGNAL", self.width / 2, 22, 0.90, 0.72, 0.34, 1, UIFont.Medium)
+    self:drawTextCentre("Preparing deployment...", self.width / 2, 57, 0.90, 0.90, 0.90, 1, UIFont.Small)
+    self:drawTextCentre("Synchronizing equipment and uniform", self.width / 2, 80, 0.70, 0.70, 0.70, 1, UIFont.Small)
 end
 
 function DeploymentPanel:new()

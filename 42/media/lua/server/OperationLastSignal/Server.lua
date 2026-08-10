@@ -1,4 +1,4 @@
-local Mission = require("OperationUltimaSenal/Config")
+local Mission = require("OperationLastSignal/Config")
 
 local function addAndSync(container, entry)
     local item = container:AddItem(entry.item)
@@ -78,7 +78,7 @@ local function addRoleKit(player, role)
 end
 
 local function getMissionState()
-    return ModData.getOrCreate("OperationUltimaSenal.MissionState")
+    return ModData.getOrCreate("OperationLastSignal.MissionState")
 end
 
 local function placeCases()
@@ -93,7 +93,7 @@ local function placeCases()
                 local item = square:AddWorldInventoryItem(Mission.CASE_ITEM, 0.5, 0.5, 0)
                 if item then
                     state.casesPlaced[missionCase.id] = true
-                    print("[OperacionUltimaSenal] " .. missionCase.name .. " placed.")
+                    print("[OperationLastSignal] " .. missionCase.name .. " placed.")
                 end
             end
         end
@@ -127,7 +127,7 @@ local function sendRoleStatus(player, message)
     local data = player:getModData()
     sendServerCommand(player, Mission.MOD_ID, "roleStatus", {
         roles = roles,
-        selectedRole = data.operationUltimaSenalRole,
+        selectedRole = data.operationLastSignalRole,
         message = message,
     })
 end
@@ -135,7 +135,7 @@ end
 local function selectRole(player, roleId)
     local role = Mission.getRole(roleId)
     if not role then
-        sendRoleStatus(player, "Rol no valido.")
+        sendRoleStatus(player, "Invalid role.")
         return
     end
 
@@ -143,21 +143,21 @@ local function selectRole(player, roleId)
     local username = getUsername(player)
     local claims = getClaims()
 
-    if data.operationUltimaSenalRole then
-        sendRoleStatus(player, "Ya tienes un personaje asignado.")
+    if data.operationLastSignalRole then
+        sendRoleStatus(player, "You already have an assigned character.")
         return
     end
 
     if claims[role.id] and claims[role.id] ~= username then
-        sendRoleStatus(player, "Ese personaje ya fue elegido por otro operador.")
+        sendRoleStatus(player, "That character has already been selected by another operator.")
         return
     end
 
     claims[role.id] = username
-    data.operationUltimaSenalRole = role.id
-    data.operationUltimaSenalRoleOwner = username
+    data.operationLastSignalRole = role.id
+    data.operationLastSignalRoleOwner = username
     addRoleKit(player, role)
-    sendRoleStatus(player, role.name .. " asignado. Kit de rol autorizado.")
+    sendRoleStatus(player, role.name .. " assigned. Role kit authorized.")
 end
 
 local function handleCommand(module, command, player, args)
@@ -182,7 +182,7 @@ local function handleCommand(module, command, player, args)
 
     if command == "requestBootstrap" then
         local data = player:getModData()
-        if data.operationUltimaSenalBootstrap then
+        if data.operationLastSignalBootstrap then
             return
         end
 
@@ -191,13 +191,13 @@ local function handleCommand(module, command, player, args)
         end
 
         addKit(player)
-        data.operationUltimaSenalBootstrap = true
+        data.operationLastSignalBootstrap = true
         sendServerCommand(player, Mission.MOD_ID, "bootstrapComplete", {})
     end
 end
 
 local function onServerStarted()
-    print("[OperacionUltimaSenal] Server bootstrap loaded.")
+    print("[OperationLastSignal] Server bootstrap loaded.")
 end
 
 Events.OnClientCommand.Add(handleCommand)
