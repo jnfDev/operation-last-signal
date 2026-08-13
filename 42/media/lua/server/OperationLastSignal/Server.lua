@@ -1,8 +1,28 @@
 local Mission = require("OperationLastSignal/Config")
+local BOOTSTRAP_VERSION = 1
+
+local function logDiagnostic(scope, message)
+    print("[OperationLastSignal][" .. scope .. "] " .. message)
+end
+
+local function diagnosticValue(value)
+    if value == nil then
+        return "nil"
+    end
+    return tostring(value)
+end
+
+local function diagnosticUsername(player)
+    if not player then
+        return "nil"
+    end
+    return diagnosticValue(player:getUsername() or player:getDisplayName())
+end
 
 local function addAndSync(container, entry)
     local item = container:AddItem(entry.item)
     if not item then
+        logDiagnostic("Item", "add-failed item=" .. diagnosticValue(entry.item))
         return nil
     end
 
@@ -11,6 +31,12 @@ local function addAndSync(container, entry)
     end
 
     sendAddItemToContainer(container, item)
+    logDiagnostic(
+        "Item",
+        "added item=" .. diagnosticValue(entry.item)
+            .. " destination=" .. diagnosticValue(entry.destination)
+            .. " ammo=" .. diagnosticValue(entry.ammo)
+    )
     return item
 end
 
@@ -59,6 +85,9 @@ local function addEntries(player, backpack, entries)
 end
 
 local function addKit(player)
+    local username = diagnosticUsername(player)
+    logDiagnostic("Bootstrap", "addKit-start user=" .. username)
+
     local inventory = player:getInventory()
     removeCurrentClothing(player)
 
@@ -71,10 +100,20 @@ local function addKit(player)
     end
 
     addEntries(player, backpack, Mission.COMMON_KIT)
+    logDiagnostic("Bootstrap", "addKit-complete user=" .. username)
 end
 
 local function addRoleKit(player, role)
+    local username = diagnosticUsername(player)
+    logDiagnostic(
+        "Role",
+        "addRoleKit-start user=" .. username .. " role=" .. diagnosticValue(role and role.id)
+    )
     addEntries(player, getBackpack(player), role.kit)
+    logDiagnostic(
+        "Role",
+        "addRoleKit-complete user=" .. username .. " role=" .. diagnosticValue(role and role.id)
+    )
 end
 
 local function getMissionState()
@@ -135,6 +174,12 @@ end
 local function selectRole(player, roleId)
     local role = Mission.getRole(roleId)
     if not role then
+        logDiagnostic(
+            "Role",
+            "rejected user=" .. diagnosticUsername(player)
+                .. " requestedRole=" .. diagnosticValue(roleId)
+                .. " reason=invalid-role"
+        )
         sendRoleStatus(player, "Invalid role.")
         return
     end
@@ -143,12 +188,33 @@ local function selectRole(player, roleId)
     local username = getUsername(player)
     local claims = getClaims()
 
+    logDiagnostic(
+        "Role",
+        "request user=" .. diagnosticValue(username)
+            .. " requestedRole=" .. diagnosticValue(roleId)
+            .. " playerRole=" .. diagnosticValue(data.operationLastSignalRole)
+            .. " claimedBy=" .. diagnosticValue(claims[role.id])
+    )
+
     if data.operationLastSignalRole then
+        logDiagnostic(
+            "Role",
+            "rejected user=" .. diagnosticValue(username)
+                .. " requestedRole=" .. diagnosticValue(roleId)
+                .. " reason=player-already-has-role"
+        )
         sendRoleStatus(player, "You already have an assigned character.")
         return
     end
 
     if claims[role.id] and claims[role.id] ~= username then
+        logDiagnostic(
+            "Role",
+            "rejected user=" .. diagnosticValue(username)
+                .. " requestedRole=" .. diagnosticValue(roleId)
+                .. " claimedBy=" .. diagnosticValue(claims[role.id])
+                .. " reason=role-claimed"
+        )
         sendRoleStatus(player, "That character has already been selected by another operator.")
         return
     end
@@ -156,7 +222,19 @@ local function selectRole(player, roleId)
     claims[role.id] = username
     data.operationLastSignalRole = role.id
     data.operationLastSignalRoleOwner = username
+    player:transmitModData()
+    logDiagnostic(
+        "Role",
+        "state-stored user=" .. diagnosticValue(username)
+            .. " playerRole=" .. diagnosticValue(data.operationLastSignalRole)
+            .. " roleOwner=" .. diagnosticValue(data.operationLastSignalRoleOwner)
+            .. " claimedBy=" .. diagnosticValue(claims[role.id])
+    )
     addRoleKit(player, role)
+    logDiagnostic(
+        "Role",
+        "assigned user=" .. diagnosticValue(username) .. " role=" .. diagnosticValue(role.id)
+    )
     sendRoleStatus(player, role.name .. " assigned. Role kit authorized.")
 end
 
@@ -166,6 +244,12 @@ local function handleCommand(module, command, player, args)
     end
 
     if command == "requestRoleStatus" then
+        local data = player:getModData()
+        logDiagnostic(
+            "Role",
+            "status-request user=" .. diagnosticUsername(player)
+                .. " playerRole=" .. diagnosticValue(data.operationLastSignalRole)
+        )
         sendRoleStatus(player)
         return
     end
@@ -182,17 +266,47 @@ local function handleCommand(module, command, player, args)
 
     if command == "requestBootstrap" then
         local data = player:getModData()
-        if data.operationLastSignalBootstrap then
+        local username = diagnosticUsername(player)
+        logDiagnostic(
+            "Bootstrap",
+            "request user=" .. username
+                .. " storedVersion=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
+                .. " expectedVersion=" .. diagnosticValue(BOOTSTRAP_VERSION)
+                .. " hasSquare=" .. diagnosticValue(player:getSquare() ~= nil)
+        )
+
+        if data.operationLastSignalBootstrapVersion == BOOTSTRAP_VERSION then
+            logDiagnostic(
+                "Bootstrap",
+                "skipped user=" .. username
+                    .. " version=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
+                    .. " reason=already-complete"
+            )
+            sendServerCommand(player, Mission.MOD_ID, "bootstrapComplete", {})
+            logDiagnostic("Bootstrap", "complete-sent user=" .. username)
             return
         end
 
         if not player:getSquare() then
+            logDiagnostic("Bootstrap", "deferred user=" .. username .. " reason=no-square")
             return
         end
 
         addKit(player)
-        data.operationLastSignalBootstrap = true
+        logDiagnostic(
+            "Bootstrap",
+            "before-state-store user=" .. username
+                .. " storedVersion=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
+        )
+        data.operationLastSignalBootstrapVersion = BOOTSTRAP_VERSION
+        player:transmitModData()
+        logDiagnostic(
+            "Bootstrap",
+            "state-stored user=" .. username
+                .. " storedVersion=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
+        )
         sendServerCommand(player, Mission.MOD_ID, "bootstrapComplete", {})
+        logDiagnostic("Bootstrap", "complete-sent user=" .. username)
     end
 end
 
