@@ -2,6 +2,7 @@ OperationLastSignal = OperationLastSignal or {}
 
 OperationLastSignal.MOD_ID = "operation-last-signal-dev"
 OperationLastSignal.SPAWN = { x = 5579, y = 12485, z = 1 }
+OperationLastSignal.ROLE_PROFILE_VERSION = 1
 
 OperationLastSignal.CASES = {
     { id = "case-1", name = "Case One", x = 5579, y = 12485, z = 0 },
@@ -66,14 +67,38 @@ OperationLastSignal.RIFLE_KIT = {
     { item = "Base.556Box", count = 4, destination = "backpack" },
 }
 
--- Role selection assigns identity and equipment. Vanilla professions, traits,
--- and skills remain unchanged.
+OperationLastSignal.COMMON_SKILLS = {
+    Fitness = 7,
+    Strength = 7,
+    Aiming = 5,
+    Reloading = 5,
+    Sprinting = 4,
+    Nimble = 3,
+    Lightfoot = 3,
+    Maintenance = 3,
+    SmallBlade = 3,
+    Axe = 2,
+}
+
+-- Role selection assigns identity, skill floors, technical knowledge, and equipment.
 OperationLastSignal.ROLES = {
     {
         id = "commander",
         name = "Captain Marcus Hale",
         title = "Commander",
         description = "Coordinates routes, withdrawals, and mission decisions.",
+        identity = {
+            forename = "Captain Marcus",
+            surname = "Hale",
+            displayName = "Captain Marcus Hale",
+        },
+        skills = {
+            Aiming = 7,
+            Reloading = 6,
+            Nimble = 5,
+            Sprinting = 5,
+            Maintenance = 5,
+        },
         rifleKit = true,
         kit = {
             { item = "Base.Map", count = 1, destination = "backpack" },
@@ -86,6 +111,16 @@ OperationLastSignal.ROLES = {
         name = "Dr. Elena Reyes",
         title = "Medic and specialist",
         description = "Authenticates the cases and keeps the team alive.",
+        identity = {
+            forename = "Dr. Elena",
+            surname = "Reyes",
+            displayName = "Dr. Elena Reyes",
+        },
+        skills = {
+            Doctor = 10,
+            Nimble = 4,
+            Lightfoot = 5,
+        },
         rifleKit = true,
         kit = {
             {
@@ -111,6 +146,57 @@ OperationLastSignal.ROLES = {
         name = "Corporal Noah Bennett",
         title = "Engineer",
         description = "Keeps the vehicles operational and opens the extraction route.",
+        identity = {
+            forename = "Corporal Noah",
+            surname = "Bennett",
+            displayName = "Corporal Noah Bennett",
+        },
+        skills = {
+            Mechanics = 10,
+            Electricity = 8,
+            MetalWelding = 10,
+            Maintenance = 6,
+        },
+        recipes = {
+            "Basic Mechanics",
+            "Intermediate Mechanics",
+            "Advanced Mechanics",
+            "Generator",
+            "MetalWallLvl1",
+            "MetalWallLvl2",
+            "MetalFloorLvl1",
+            "MetalWindowFrameLvl1",
+            "MetalWindowFrameLvl2",
+            "MetalWallFrame",
+            "MetalDoorFrameLvl1",
+            "MetalDoorFrameLvl2",
+            "Metal_Stairs",
+            "Metal_Counter_Lvl1",
+            "Metal_Counter_Lvl2",
+            "Metal_CounterCorner_Lvl1",
+            "Metal_CounterCorner_Lvl2",
+            "Metal_Crate_Lvl1",
+            "Metal_Crate_Lvl2",
+            "Metal_LockerBig_Lvl1",
+            "Metal_LockerBig_Lvl2",
+            "Metal_LockerSmall_Lvl1",
+            "Metal_LockerSmall_Lvl2",
+            "Metal_Shelves_Lvl1",
+            "Metal_Shelves_Lvl2",
+            "MetalPoleFenceGate",
+            "MetalWireFenceGate",
+            "MetalWireFenceGateSmall",
+            "DoubleFenceGate",
+            "DoubleWireGate",
+            "MetalBigWireFence",
+            "MetalBigMetalFence",
+            "MetalPoleFenceGateSmall",
+            "MetalSmallPoleFence",
+            "MetalFenceLvl1",
+            "MetalSmallWireFence",
+            "MakeMetalSheet",
+            "MakeSmallMetalSheet",
+        },
         rifleKit = true,
         kit = {
             {
@@ -135,6 +221,19 @@ OperationLastSignal.ROLES = {
         name = "Sergeant Daniel Price",
         title = "Security",
         description = "Protects Dr. Reyes and secures dangerous entrances.",
+        identity = {
+            forename = "Sergeant Daniel",
+            surname = "Price",
+            displayName = "Sergeant Daniel Price",
+        },
+        skills = {
+            Aiming = 9,
+            Reloading = 8,
+            Nimble = 6,
+            Fitness = 8,
+            Strength = 8,
+            Maintenance = 6,
+        },
         kit = {
             { item = "Base.Shotgun", count = 1, ammo = 4, chambered = true, slotType = "Back" },
             { item = "Base.ShotgunShellsBox", count = 4, destination = "backpack" },

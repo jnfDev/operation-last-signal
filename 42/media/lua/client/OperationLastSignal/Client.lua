@@ -13,6 +13,8 @@ local updateTicks = 0
 local casePlacementTicks = 0
 local pendingRoleStatus
 local pendingAttachedGear
+local pendingRoleIdentities = {}
+local pendingRoleProfile
 
 local function requestMissionState()
     sendClientCommand(Mission.MOD_ID, "requestBootstrap", {})
@@ -229,12 +231,227 @@ local function attachPendingGear(player)
     end
 end
 
+local function validateRoleProfile(player, profile)
+    if type(profile) ~= "table" or profile.version ~= Mission.ROLE_PROFILE_VERSION then
+        return nil, "version-mismatch"
+    end
+
+    local role = Mission.getRole(profile.roleId)
+    if not role or not role.identity or type(profile.identity) ~= "table" then
+        return nil, "invalid-role"
+    end
+
+    local selectedRole = pendingRoleStatus and pendingRoleStatus.selectedRole
+    if not selectedRole then
+        selectedRole = player:getModData().operationLastSignalRole
+    end
+    if selectedRole ~= profile.roleId then
+        return nil, "role-mismatch"
+    end
+
+    if profile.identity.forename ~= role.identity.forename
+        or profile.identity.surname ~= role.identity.surname
+        or profile.identity.displayName ~= role.identity.displayName then
+        return nil, "identity-mismatch"
+    end
+
+    if type(profile.applyProgression) ~= "boolean"
+        or type(profile.skills) ~= "table"
+        or type(profile.recipes) ~= "table" then
+        return nil, "invalid-progression"
+    end
+
+    local expectedSkills = {}
+    for skillName, targetLevel in pairs(Mission.COMMON_SKILLS or {}) do
+        expectedSkills[skillName] = targetLevel
+    end
+    for skillName, targetLevel in pairs(role.skills or {}) do
+        expectedSkills[skillName] = math.max(expectedSkills[skillName] or 0, targetLevel)
+    end
+
+    local expectedSkillCount = 0
+    for skillName, targetLevel in pairs(expectedSkills) do
+        expectedSkillCount = expectedSkillCount + 1
+        if profile.skills[skillName] ~= targetLevel then
+            return nil, "skill-profile-mismatch"
+        end
+    end
+    local receivedSkillCount = 0
+    for _ in pairs(profile.skills) do
+        receivedSkillCount = receivedSkillCount + 1
+    end
+    if receivedSkillCount ~= expectedSkillCount then
+        return nil, "skill-profile-mismatch"
+    end
+
+    local expectedRecipes = role.recipes or {}
+    if #profile.recipes ~= #expectedRecipes then
+        return nil, "recipe-profile-mismatch"
+    end
+    for index, recipe in ipairs(expectedRecipes) do
+        if profile.recipes[index] ~= recipe then
+            return nil, "recipe-profile-mismatch"
+        end
+    end
+
+    return role
+end
+
+local function applyRoleIdentity(player, identity)
+    local descriptor = player:getDescriptor()
+    if not descriptor then
+        error("missing-descriptor")
+    end
+
+    if descriptor:getForename() ~= identity.forename then
+        descriptor:setForename(identity.forename)
+    end
+    if descriptor:getSurname() ~= identity.surname then
+        descriptor:setSurname(identity.surname)
+    end
+    if player:getDisplayName() ~= identity.displayName then
+        player:setDisplayName(identity.displayName)
+    end
+end
+
+local function queueRoleIdentity(args)
+    if type(args) ~= "table"
+        or type(args.username) ~= "string"
+        or args.username == "" then
+        return false
+    end
+
+    local role = Mission.getRole(args.roleId)
+    if not role or not role.identity then
+        return false
+    end
+    if args.identity and type(args.identity) ~= "table" then
+        return false
+    end
+    if args.identity
+        and (args.identity.forename ~= role.identity.forename
+            or args.identity.surname ~= role.identity.surname
+            or args.identity.displayName ~= role.identity.displayName) then
+        return false
+    end
+
+    pendingRoleIdentities[args.username] = {
+        username = args.username,
+        onlineId = args.onlineId,
+        identity = role.identity,
+    }
+    return true
+end
+
+local function applyPendingRoleIdentities()
+    for username, pending in pairs(pendingRoleIdentities) do
+        local player
+        if type(pending.onlineId) == "number" then
+            player = getPlayerByOnlineID(pending.onlineId)
+        end
+        if not player then
+            player = getPlayerFromUsername(username)
+        end
+
+        if player and player:getUsername() == username then
+            local callOk = pcall(applyRoleIdentity, player, pending.identity)
+            if callOk then
+                pendingRoleIdentities[username] = nil
+            end
+        end
+    end
+end
+
+local function sendRoleProfileResult(profile, success, resultError)
+    sendClientCommand(Mission.MOD_ID, "roleProfileResult", {
+        roleId = type(profile) == "table" and profile.roleId or nil,
+        version = type(profile) == "table" and profile.version or nil,
+        success = success,
+        error = resultError and string.sub(tostring(resultError), 1, 200) or nil,
+    })
+end
+
+local function verifyLocalRoleProgression(player, profile)
+    for skillName, targetLevel in pairs(profile.skills) do
+        local perk = Perks.FromString(skillName)
+        if not perk or not PerkFactory.getPerk(perk) then
+            return false
+        end
+        if player:getPerkLevel(perk) < targetLevel then
+            return false
+        end
+    end
+
+    for _, recipe in ipairs(profile.recipes) do
+        if not player:isRecipeActuallyKnown(recipe) then
+            return false
+        end
+    end
+
+    return true
+end
+
+
+local function completePendingRoleProfile(player)
+    if not pendingRoleProfile or not player or player:isDead() then
+        return
+    end
+
+    local role, validationError = validateRoleProfile(player, pendingRoleProfile)
+    if not role then
+        local rejectedProfile = pendingRoleProfile
+        pendingRoleProfile = nil
+        sendRoleProfileResult(rejectedProfile, false, validationError)
+        return
+    end
+
+    local callOk, progressionReady = pcall(verifyLocalRoleProgression, player, pendingRoleProfile)
+    if not callOk or not progressionReady then
+        return
+    end
+
+    local completedProfile = pendingRoleProfile
+    pendingRoleProfile = nil
+    sendRoleProfileResult(completedProfile, true)
+end
+
+local function handleRoleProfile(profile)
+    local player = getPlayer()
+
+    if not player or player:isDead() then
+        sendRoleProfileResult(profile, false, "player-unavailable")
+        return
+    end
+
+    local role, validationError = validateRoleProfile(player, profile)
+    if not role then
+        sendRoleProfileResult(profile, false, validationError)
+        return
+    end
+
+    local callOk, applyError = pcall(applyRoleIdentity, player, profile.identity)
+    if not callOk then
+        sendRoleProfileResult(profile, false, applyError)
+        return
+    end
+
+    if not profile.applyProgression then
+        sendRoleProfileResult(profile, true)
+        return
+    end
+
+    pendingRoleProfile = profile
+    completePendingRoleProfile(player)
+end
+
 local function retryMissionState(player)
     if not player or player:isDead() then
         return
     end
 
     attachPendingGear(player)
+    applyPendingRoleIdentities()
+    completePendingRoleProfile(player)
 
     casePlacementTicks = casePlacementTicks + 1
     if casePlacementTicks % 120 == 0 then
@@ -253,6 +470,18 @@ end
 
 local function onServerCommand(module, command, args)
     if module ~= Mission.MOD_ID then
+        return
+    end
+
+    if command == "applyRoleProfile" then
+        handleRoleProfile(args)
+        return
+    end
+
+    if command == "syncRoleIdentity" then
+        if queueRoleIdentity(args) then
+            applyPendingRoleIdentities()
+        end
         return
     end
 
@@ -277,6 +506,15 @@ local function onServerCommand(module, command, args)
 
     roleStatusReceived = true
     pendingRoleStatus = args
+    for _, roleStatus in ipairs(args.roles or {}) do
+        if roleStatus.claimedBy and roleStatus.claimedBy ~= "" then
+            queueRoleIdentity({
+                roleId = roleStatus.id,
+                username = roleStatus.claimedBy,
+            })
+        end
+    end
+    applyPendingRoleIdentities()
     if not bootstrapComplete then
         return
     end
