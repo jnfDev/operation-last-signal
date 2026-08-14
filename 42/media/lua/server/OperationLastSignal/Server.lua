@@ -29,6 +29,21 @@ local function addAndSync(container, entry)
     if entry.ammo then
         item:setCurrentAmmoCount(entry.ammo)
     end
+    if entry.containsClip then
+        item:setContainsClip(true)
+    end
+    if entry.chambered then
+        item:setRoundChambered(true)
+    end
+    if entry.uses then
+        item:setUsedDelta(item:getUseDelta() * entry.uses)
+    end
+    if entry.emptyFluid then
+        local fluidContainer = item:getFluidContainer()
+        if fluidContainer then
+            fluidContainer:Empty()
+        end
+    end
 
     sendAddItemToContainer(container, item)
     logDiagnostic(
@@ -36,11 +51,31 @@ local function addAndSync(container, entry)
         "added item=" .. diagnosticValue(entry.item)
             .. " destination=" .. diagnosticValue(entry.destination)
             .. " ammo=" .. diagnosticValue(entry.ammo)
+            .. " uses=" .. diagnosticValue(entry.uses)
     )
+
+    if entry.contents then
+        local itemContainer = item:getInventory()
+        if not itemContainer then
+            logDiagnostic("Item", "container-missing item=" .. diagnosticValue(entry.item))
+            return item
+        end
+
+        for _, childEntry in ipairs(entry.contents) do
+            for _ = 1, childEntry.count or 1 do
+                addAndSync(itemContainer, childEntry)
+            end
+        end
+    end
+
     return item
 end
 
 local function equipAndSync(player, item)
+    if not item then
+        return
+    end
+
     local location = item:canBeEquipped() or item:getBodyLocation()
     if not location then
         return
@@ -69,19 +104,28 @@ local function getBackpack(player)
     return player:getInventory():FindAndReturn("Bag_ALICEpack_Army")
 end
 
-local function addEntries(player, backpack, entries)
+local function addEntries(player, backpack, entries, attachedGear)
     local inventory = player:getInventory()
     local backpackInventory = backpack and backpack:getInventory()
+    attachedGear = attachedGear or {}
 
     for _, entry in ipairs(entries) do
         local container = entry.destination == "backpack" and backpackInventory or inventory
         if not container then
             container = inventory
         end
-        for _ = 1, entry.count do
-            addAndSync(container, entry)
+        for _ = 1, entry.count or 1 do
+            local item = addAndSync(container, entry)
+            if item and entry.slotType then
+                table.insert(attachedGear, {
+                    itemId = item:getID(),
+                    slotType = entry.slotType,
+                })
+            end
         end
     end
+
+    return attachedGear
 end
 
 local function addKit(player)
@@ -99,8 +143,11 @@ local function addKit(player)
         equipAndSync(player, uniformItem)
     end
 
-    addEntries(player, backpack, Mission.COMMON_KIT)
+    local attachedGear = {}
+    addEntries(player, backpack, Mission.COMMON_KIT, attachedGear)
+    addEntries(player, backpack, Mission.ATTACHED_GEAR, attachedGear)
     logDiagnostic("Bootstrap", "addKit-complete user=" .. username)
+    return attachedGear
 end
 
 local function addRoleKit(player, role)
@@ -109,11 +156,17 @@ local function addRoleKit(player, role)
         "Role",
         "addRoleKit-start user=" .. username .. " role=" .. diagnosticValue(role and role.id)
     )
-    addEntries(player, getBackpack(player), role.kit)
+    local backpack = getBackpack(player)
+    local attachedGear = {}
+    if role.rifleKit then
+        addEntries(player, backpack, Mission.RIFLE_KIT, attachedGear)
+    end
+    addEntries(player, backpack, role.kit, attachedGear)
     logDiagnostic(
         "Role",
         "addRoleKit-complete user=" .. username .. " role=" .. diagnosticValue(role and role.id)
     )
+    return attachedGear
 end
 
 local function getMissionState()
@@ -230,7 +283,12 @@ local function selectRole(player, roleId)
             .. " roleOwner=" .. diagnosticValue(data.operationLastSignalRoleOwner)
             .. " claimedBy=" .. diagnosticValue(claims[role.id])
     )
-    addRoleKit(player, role)
+    local attachedGear = addRoleKit(player, role)
+    if #attachedGear > 0 then
+        sendServerCommand(player, Mission.MOD_ID, "attachGear", {
+            attachedGear = attachedGear,
+        })
+    end
     logDiagnostic(
         "Role",
         "assigned user=" .. diagnosticValue(username) .. " role=" .. diagnosticValue(role.id)
@@ -292,7 +350,7 @@ local function handleCommand(module, command, player, args)
             return
         end
 
-        addKit(player)
+        local attachedGear = addKit(player)
         logDiagnostic(
             "Bootstrap",
             "before-state-store user=" .. username
@@ -305,7 +363,9 @@ local function handleCommand(module, command, player, args)
             "state-stored user=" .. username
                 .. " storedVersion=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
         )
-        sendServerCommand(player, Mission.MOD_ID, "bootstrapComplete", {})
+        sendServerCommand(player, Mission.MOD_ID, "bootstrapComplete", {
+            attachedGear = attachedGear,
+        })
         logDiagnostic("Bootstrap", "complete-sent user=" .. username)
     end
 end

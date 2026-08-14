@@ -1,6 +1,7 @@
 local Mission = require("OperationLastSignal/Config")
 require "ISUI/ISPanel"
 require "ISUI/ISButton"
+require "TimedActions/ISTimedActionQueue"
 
 local RoleSelectPanel = ISPanel:derive("OperationLastSignalRoleSelect")
 local DeploymentPanel = ISPanel:derive("OperationLastSignalDeployment")
@@ -11,6 +12,7 @@ local roleStatusReceived = false
 local updateTicks = 0
 local casePlacementTicks = 0
 local pendingRoleStatus
+local pendingAttachedGear
 
 local function requestMissionState()
     sendClientCommand(Mission.MOD_ID, "requestBootstrap", {})
@@ -160,10 +162,79 @@ local function requestBootstrap(playerIndex, player)
     requestMissionState()
 end
 
+local function queueAttachedGear(attachedGear)
+    if not attachedGear or #attachedGear == 0 then
+        return
+    end
+
+    pendingAttachedGear = pendingAttachedGear or {}
+    for _, attachment in ipairs(attachedGear) do
+        local alreadyPending = false
+        for _, pending in ipairs(pendingAttachedGear) do
+            if pending.itemId == attachment.itemId then
+                alreadyPending = true
+                break
+            end
+        end
+
+        if not alreadyPending then
+            table.insert(pendingAttachedGear, {
+                itemId = attachment.itemId,
+                slotType = attachment.slotType,
+            })
+        end
+    end
+end
+
+local function attachPendingGear(player)
+    if not pendingAttachedGear or #pendingAttachedGear == 0 then
+        pendingAttachedGear = nil
+        return
+    end
+    if not player then
+        return
+    end
+
+    local hotbar = getPlayerHotbar(player:getPlayerNum())
+    if not hotbar then
+        return
+    end
+
+    hotbar:refresh()
+    local inventory = player:getInventory()
+    local attachment = pendingAttachedGear[1]
+    local item = inventory:getItemById(attachment.itemId)
+    if not item then
+        return
+    end
+
+    if item:getAttachedSlotType() == attachment.slotType then
+        table.remove(pendingAttachedGear, 1)
+        if #pendingAttachedGear > 0 then
+            return
+        end
+        pendingAttachedGear = nil
+        return
+    end
+
+    if ISTimedActionQueue.hasActionType(player, "ISAttachItemHotbar") then
+        return
+    end
+
+    local slotIndex = hotbar:getThisSlotIndex(attachment.slotType)
+    local slot = slotIndex and hotbar.availableSlot[slotIndex]
+    local model = slot and slot.def.attachments[item:getAttachmentType()]
+    if slot and model then
+        hotbar:attachItem(item, model, slotIndex, slot.def, true)
+    end
+end
+
 local function retryMissionState(player)
     if not player or player:isDead() then
         return
     end
+
+    attachPendingGear(player)
 
     casePlacementTicks = casePlacementTicks + 1
     if casePlacementTicks % 120 == 0 then
@@ -187,10 +258,16 @@ local function onServerCommand(module, command, args)
 
     if command == "bootstrapComplete" then
         bootstrapComplete = true
+        queueAttachedGear(args and args.attachedGear)
         hideDeploymentPanel()
         if pendingRoleStatus then
             showRolePanel(pendingRoleStatus)
         end
+        return
+    end
+
+    if command == "attachGear" then
+        queueAttachedGear(args and args.attachedGear)
         return
     end
 
