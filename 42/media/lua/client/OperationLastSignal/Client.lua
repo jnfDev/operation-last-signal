@@ -154,11 +154,27 @@ local function showRolePanel(status)
     rolePanel = RoleSelectPanel:new(status)
 end
 
+local function resetCharacterSession()
+    bootstrapComplete = false
+    roleStatusReceived = false
+    updateTicks = 0
+    pendingRoleStatus = nil
+    pendingAttachedGear = nil
+    pendingRoleProfile = nil
+
+    if rolePanel then
+        rolePanel:removeFromUIManager()
+        rolePanel = nil
+    end
+    hideDeploymentPanel()
+end
+
 local function requestBootstrap(playerIndex, player)
     if not player or player:isDead() then
         return
     end
 
+    resetCharacterSession()
     showDeploymentPanel()
     requestMissionState()
 end
