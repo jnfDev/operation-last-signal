@@ -10,7 +10,6 @@ local deploymentPanel
 local bootstrapComplete = false
 local roleStatusReceived = false
 local updateTicks = 0
-local casePlacementTicks = 0
 local pendingRoleStatus
 local pendingAttachedGear
 local pendingRoleIdentities = {}
@@ -452,11 +451,6 @@ local function retryMissionState(player)
     attachPendingGear(player)
     applyPendingRoleIdentities()
     completePendingRoleProfile(player)
-
-    casePlacementTicks = casePlacementTicks + 1
-    if casePlacementTicks % 120 == 0 then
-        sendClientCommand(Mission.MOD_ID, "requestCasePlacement", {})
-    end
 
     if bootstrapComplete and roleStatusReceived then
         return

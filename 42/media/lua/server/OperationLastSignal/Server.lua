@@ -185,7 +185,7 @@ local function getMissionState()
     return ModData.getOrCreate("OperationLastSignal.MissionState")
 end
 
-local function placeCases()
+local function placeCasesInChunk(loadedChunk)
     local state = getMissionState()
     state.casesPlaced = state.casesPlaced or {}
     local cell = getWorld():getCell()
@@ -193,7 +193,7 @@ local function placeCases()
     for _, missionCase in ipairs(Mission.CASES) do
         if not state.casesPlaced[missionCase.id] then
             local square = cell:getGridSquare(missionCase.x, missionCase.y, missionCase.z)
-            if square then
+            if square and square:getChunk() == loadedChunk then
                 local item = square:AddWorldInventoryItem(Mission.CASE_ITEM, 0.5, 0.5, 0)
                 if item then
                     state.casesPlaced[missionCase.id] = true
@@ -795,11 +795,6 @@ local function handleCommand(module, command, player, args)
         return
     end
 
-    if command == "requestCasePlacement" then
-        placeCases()
-        return
-    end
-
     if command == "selectRole" then
         selectRole(player, args and args.roleId)
         return
@@ -813,13 +808,19 @@ local function handleCommand(module, command, player, args)
     if command == "requestBootstrap" then
         local data = player:getModData()
         local username = diagnosticUsername(player)
+        local playerSquare = player:getSquare()
         logDiagnostic(
             "Bootstrap",
             "request user=" .. username
                 .. " storedVersion=" .. diagnosticValue(data.operationLastSignalBootstrapVersion)
                 .. " expectedVersion=" .. diagnosticValue(BOOTSTRAP_VERSION)
-                .. " hasSquare=" .. diagnosticValue(player:getSquare() ~= nil)
+                .. " hasSquare=" .. diagnosticValue(playerSquare ~= nil)
         )
+
+        local playerChunk = playerSquare and playerSquare:getChunk()
+        if playerChunk then
+            placeCasesInChunk(playerChunk)
+        end
 
         if data.operationLastSignalBootstrapVersion == BOOTSTRAP_VERSION then
             logDiagnostic(
@@ -833,7 +834,7 @@ local function handleCommand(module, command, player, args)
             return
         end
 
-        if not player:getSquare() then
+        if not playerSquare then
             logDiagnostic("Bootstrap", "deferred user=" .. username .. " reason=no-square")
             return
         end
@@ -863,4 +864,5 @@ local function onServerStarted()
 end
 
 Events.OnClientCommand.Add(handleCommand)
+Events.LoadChunk.Add(placeCasesInChunk)
 Events.OnServerStarted.Add(onServerStarted)
