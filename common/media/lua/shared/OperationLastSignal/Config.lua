@@ -235,7 +235,7 @@ OperationLastSignal.ROLES = {
             Maintenance = 6,
         },
         kit = {
-            { item = "Base.Shotgun", count = 1, ammo = 4, chambered = true, slotType = "Back" },
+            { item = "Base.JS3T_Shotgun", count = 1, ammo = 4, chambered = true, slotType = "Back" },
             { item = "Base.ShotgunShellsBox", count = 4, destination = "backpack" },
         },
     },
